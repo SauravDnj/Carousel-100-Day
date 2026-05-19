@@ -1,0 +1,12 @@
+{
+  "name": "rag-carousel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

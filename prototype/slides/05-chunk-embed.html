@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div class="top-bar">
+    <div class="reminder-tag">(REMINDER)</div>
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot filled"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="content top">
+    <div class="headline size-90">
+      Chunk,<br>
+      then <em>embed.</em>
+    </div>
+
+    <div class="body-text" style="margin-top:36px;">
+      Split documents into bite-sized chunks (~500 tokens). Run each through an embedding model to get a <em>vector</em> — a list of numbers that captures meaning.
+    </div>
+
+    <div style="margin-top:40px; display:flex; align-items:center; gap:18px; font-family:'JetBrains Mono', monospace; font-size:24px; flex-wrap:wrap;">
+      <div style="padding:14px 22px; background:white; border:2px solid var(--text); border-radius:8px;">"The cat sat..."</div>
+      <div style="font-size:36px; color:var(--orange);">→</div>
+      <div style="padding:14px 22px; background:var(--lavender); border-radius:8px;">[0.21, -0.4, 0.9, ...]</div>
+    </div>
+
+    <div class="ticket" style="position:absolute; right:0; top:60px; transform:rotate(-7deg);">
+      🧠 VECTORS
+    </div>
+
+    <div class="polaroid" style="position:absolute; right:40px; bottom:20px;">
+      <div class="photo" style="background:var(--orange); color:var(--bg); font-size:60px;">📄→🔢</div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="handle">@AIBYTES</div>
+    <div class="arrow">→</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div class="top-bar">
+    <div class="reminder-tag">(REMINDER)</div>
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot filled"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="content top">
+    <div class="headline size-80">
+      Stuff it<br>
+      in the <em>prompt.</em>
+    </div>
+
+    <div class="body-text" style="margin-top:36px;">
+      Take the retrieved chunks, paste them into the prompt as <em>context</em>, then ask the LLM to answer using <strong>only</strong> what's there.
+    </div>
+
+    <div style="margin-top:36px; background: white; border: 2px solid var(--text); border-radius:12px; padding:24px; font-family:'JetBrains Mono', monospace; font-size:22px; line-height:1.5; box-shadow: 5px 5px 0 var(--text); max-width:780px;">
+      <span style="color:var(--orange);">Context:</span><br>
+      &nbsp;&nbsp;{retrieved_chunks}<br><br>
+      <span style="color:var(--orange);">Question:</span> {user_query}<br><br>
+      <span style="color:var(--green);">Answer using only the<br>&nbsp;context above.</span>
+    </div>
+
+    <div class="stack-text" style="position:absolute; right:10px; top:30px; transform:rotate(8deg);">
+      <span class="back">Grounded!</span>
+      <span class="front">Grounded!</span>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="handle">@AIBYTES</div>
+    <div class="arrow">→</div>
+  </div>
+</body>
+</html>
