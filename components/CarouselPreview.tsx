@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brand, Palette, SlideContent, ThemeId } from '@/lib/types';
+import { Brand, Palette, SlideContent, SlideKind, ThemeId } from '@/lib/types';
 import ThemeSlide from './themes';
 import { SLIDE_W, SLIDE_H } from './themes/types';
+import { Sparkle, Star, Bolt, Blob, DotCluster } from './themes/stickers';
 import { downloadSinglePng } from '@/lib/download';
 
 interface Props {
@@ -38,6 +39,11 @@ export default function CarouselPreview({ slides, themeId, palette, brand, dayLa
     const id = setInterval(() => setIndex(i => (i + 1) % total), 2200);
     return () => clearInterval(id);
   }, [playing, total]);
+
+  // Keep the index in range when slides are added/removed in the editor.
+  useEffect(() => {
+    setIndex(i => (i > total - 1 ? Math.max(0, total - 1) : i));
+  }, [total]);
 
   const scale = displayWidth / SLIDE_W;
   const displayH = SLIDE_H * scale;
@@ -73,12 +79,12 @@ export default function CarouselPreview({ slides, themeId, palette, brand, dayLa
             style={{ position: 'absolute', inset: 0, transformOrigin: 'top left' }}
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: SLIDE_W, height: SLIDE_H, position: 'relative' }}>
-              {/* The slide itself enters with a subtle slide+fade */}
+              {/* The slide enters with a kind-aware motion (cover pops, diagram rises, rest slide in) */}
               <motion.div
-                initial={{ opacity: 0, x: 60, scale: 0.98 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-                style={{ width: SLIDE_W, height: SLIDE_H }}
+                initial={entranceFor(currentSlide.kind).initial}
+                animate={entranceFor(currentSlide.kind).animate}
+                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                style={{ width: SLIDE_W, height: SLIDE_H, transformOrigin: 'center' }}
               >
                 <ThemeSlide
                   themeId={themeId}
@@ -91,25 +97,8 @@ export default function CarouselPreview({ slides, themeId, palette, brand, dayLa
                   postLabel={postLabel}
                 />
               </motion.div>
-              {/* Sparkle — preview only */}
-              <motion.div
-                style={{
-                  position: 'absolute', top: 28, right: 28, width: 20, height: 20,
-                  pointerEvents: 'none',
-                }}
-                animate={{ scale: [0.6, 1.2, 0.6], opacity: [0.3, 0.9, 0.3], rotate: [0, 180, 360] }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <svg viewBox="0 0 14 14" fill={palette.accent1}>
-                  <path d="M7 0 L8 5 L13 6 L8 7 L7 14 L6 7 L0 6 L6 5 Z" />
-                </svg>
-              </motion.div>
-              {/* Floating dot decoration */}
-              <motion.div
-                style={{ position: 'absolute', bottom: 100, left: 50, width: 12, height: 12, borderRadius: '50%', background: palette.accent2, pointerEvents: 'none' }}
-                animate={{ y: [0, -20, 0], opacity: [0.4, 0.8, 0.4] }}
-                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-              />
+              {/* Animated decoration layer — preview only, palette-driven, varies per slide */}
+              <DecorLayer palette={palette} seed={index} kind={currentSlide.kind} />
             </div>
           </motion.div>
         </AnimatePresence>
@@ -118,7 +107,7 @@ export default function CarouselPreview({ slides, themeId, palette, brand, dayLa
       {/* Off-screen, full-size renders for download. Hidden from view but in DOM. */}
       <div style={{ position: 'absolute', left: -99999, top: 0, pointerEvents: 'none' }} aria-hidden>
         {slides.map((s, i) => (
-          <div key={i} ref={el => { slideRefs.current[i] = el; }} style={{ width: SLIDE_W, height: SLIDE_H }}>
+          <div key={i} ref={el => { slideRefs.current[i] = el; }} style={{ width: SLIDE_W, height: SLIDE_H, position: 'relative' }}>
             <ThemeSlide
               themeId={themeId} slide={s} index={i} total={total} palette={palette}
               brand={brand} dayLabel={dayLabel} postLabel={postLabel}
@@ -164,4 +153,76 @@ function btn(disabled: boolean): React.CSSProperties {
     border: '1px solid #333', padding: '8px 14px', borderRadius: 8, fontSize: 13,
     cursor: disabled ? 'not-allowed' : 'pointer',
   };
+}
+
+// Kind-aware entrance: covers pop, diagrams/visuals rise, code zooms, the rest slide in.
+function entranceFor(kind: SlideKind): { initial: any; animate: any } {
+  switch (kind) {
+    case 'cover':
+    case 'cta':
+      return { initial: { opacity: 0, scale: 0.9 }, animate: { opacity: 1, scale: 1 } };
+    case 'diagram':
+    case 'visual':
+      return { initial: { opacity: 0, y: 60 }, animate: { opacity: 1, y: 0 } };
+    case 'code':
+      return { initial: { opacity: 0, scale: 1.05 }, animate: { opacity: 1, scale: 1 } };
+    default:
+      return { initial: { opacity: 0, x: 70 }, animate: { opacity: 1, x: 0 } };
+  }
+}
+
+// Preview-only animated stickers/decorations. Deterministic per slide (seed) so
+// shapes stay put between renders but vary slide-to-slide. Never captured to PNG.
+function DecorLayer({ palette, seed, kind }: { palette: Palette; seed: number; kind: SlideKind }) {
+  const rnd = (n: number) => { const v = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453; return v - Math.floor(v); };
+  const accents = [palette.accent1, palette.accent2, palette.accent3];
+  const dense = kind === 'code' || kind === 'diagram';
+  const showcase = kind === 'cover' || kind === 'cta';
+  const sparkles = (dense ? [0] : [0, 1, 2]).map(i => ({
+    x: 70 + rnd(i + 1) * (SLIDE_W - 220),
+    y: 150 + rnd(i + 5) * (SLIDE_H - 420),
+    size: 28 + rnd(i + 9) * 28,
+    dur: 2.2 + rnd(i + 13) * 1.6,
+  }));
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }} aria-hidden>
+      {showcase && (
+        <motion.div
+          style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.16 }}
+          animate={{ scale: [1, 1.06, 1], rotate: [0, 6, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <Blob color={palette.accent2} size={440} />
+        </motion.div>
+      )}
+      {sparkles.map((sp, i) => (
+        <motion.div
+          key={i}
+          style={{ position: 'absolute', left: sp.x, top: sp.y }}
+          animate={{ scale: [0.5, 1.15, 0.5], opacity: [0.25, 0.85, 0.25], rotate: [0, 180, 360] }}
+          transition={{ duration: sp.dur, repeat: Infinity, ease: 'easeInOut', delay: i * 0.35 }}
+        >
+          <Sparkle color={accents[i % accents.length]} size={sp.size} />
+        </motion.div>
+      ))}
+      <motion.div
+        style={{ position: 'absolute', right: 78, top: 100 }}
+        animate={{ y: [0, -16, 0], rotate: [-6, 8, -6] }}
+        transition={{ duration: 4 + rnd(20) * 2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        {seed % 2 === 0
+          ? <Star color={palette.accent2} size={44} stroke={palette.text} />
+          : <Bolt color={palette.accent1} size={44} stroke={palette.text} />}
+      </motion.div>
+      {!dense && (
+        <motion.div
+          style={{ position: 'absolute', left: 56, bottom: 140, opacity: 0.5 }}
+          animate={{ y: [0, -22, 0], x: [0, 10, 0] }}
+          transition={{ duration: 5 + rnd(30) * 2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <DotCluster color={palette.accent3} size={110} />
+        </motion.div>
+      )}
+    </div>
+  );
 }

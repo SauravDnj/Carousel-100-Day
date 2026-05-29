@@ -56,6 +56,15 @@ export interface SlideContent {
   sticker?: string;
   emoji?: string;
   diagram?: DiagramSpec;
+  /** Uploaded image as a data URL. On an `image` slide it's the hero;
+   *  on any other slide it renders as a framed photo overlay. */
+  image?: string;
+  /** How an `image`-kind hero fits its frame. Default 'cover'. */
+  imageFit?: 'cover' | 'contain';
+  /** Corner for the photo overlay on non-image slides. Default 'tr'. */
+  imagePos?: 'tl' | 'tr' | 'bl' | 'br';
+  /** Size of the photo overlay on non-image slides. Default 'md'. */
+  imageSize?: 'sm' | 'md' | 'lg';
 }
 
 export type SlideKind =
@@ -70,7 +79,8 @@ export type SlideKind =
   | 'mistake'
   | 'visual'
   | 'cta'
-  | 'diagram';
+  | 'diagram'
+  | 'image';
 
 export type DiagramSpec =
   | { kind: 'flow';     nodes: DiagramNode[] }
@@ -105,7 +115,7 @@ export interface DiagramSide { title: string; items: string[]; accent?: string }
 export interface DiagramLevel { label: string; sub?: string }
 export interface DiagramTreeNode { label: string; children?: DiagramTreeNode[] }
 
-export type ThemeId = 'retro-grid' | 'dark-cyber' | 'minimal-swiss' | 'pastel-soft' | 'notebook' | 'glass' | 'brutalist' | 'magazine' | 'aurora' | 'holographic' | 'risograph' | 'comic' | 'y2k' | 'holo-mesh' | 'cyber-glitch' | 'ascii' | 'tape' | 'cassette' | 'notebook-grid' | 'glass-dark' | 'mono-editorial';
+export type ThemeId = 'retro-grid' | 'dark-cyber' | 'minimal-swiss' | 'pastel-soft' | 'notebook' | 'glass' | 'brutalist' | 'magazine' | 'aurora' | 'holographic' | 'risograph' | 'comic' | 'y2k' | 'holo-mesh' | 'cyber-glitch' | 'ascii' | 'tape' | 'cassette' | 'notebook-grid' | 'glass-dark' | 'mono-editorial' | 'blueprint' | 'newsprint' | 'vaporwave' | 'memphis' | 'chalkboard';
 
 export interface ThemeMeta {
   id: ThemeId;
@@ -178,7 +188,49 @@ export type PaletteId =
   | 'gdark-emerald'
   | 'mono-classic'
   | 'mono-warm'
-  | 'mono-stark';
+  | 'mono-stark'
+  | 'blueprint-classic'
+  | 'blueprint-noir'
+  | 'blueprint-sepia'
+  | 'news-classic'
+  | 'news-tabloid'
+  | 'news-vintage'
+  | 'vapor-sunset'
+  | 'vapor-miami'
+  | 'vapor-night'
+  | 'memphis-pop'
+  | 'memphis-pastel'
+  | 'memphis-bold'
+  | 'chalk-green'
+  | 'chalk-black'
+  | 'chalk-blue'
+  // —— extra palettes (round 2): 2 more per theme ——
+  | 'retro-sky' | 'retro-berry'
+  | 'cyber-ice' | 'cyber-sunset'
+  | 'swiss-forest' | 'swiss-amber'
+  | 'pastel-lilac' | 'pastel-peach'
+  | 'paper-sage' | 'paper-rose'
+  | 'glass-coral' | 'glass-violet'
+  | 'brutal-blue' | 'brutal-green'
+  | 'mag-rose' | 'mag-forest'
+  | 'aurora-rose' | 'aurora-emerald'
+  | 'holo-mint' | 'holo-sunset'
+  | 'riso-indigo' | 'riso-mustard'
+  | 'comic-sky' | 'comic-sunset'
+  | 'y2k-lime' | 'y2k-violet'
+  | 'mesh-violet' | 'mesh-lime'
+  | 'glitch-cyan' | 'glitch-amber'
+  | 'ascii-cyan' | 'ascii-magenta'
+  | 'tape-teal' | 'tape-rose'
+  | 'cassette-rust' | 'cassette-forest'
+  | 'grid-sepia' | 'grid-rose'
+  | 'gdark-rose' | 'gdark-amber'
+  | 'mono-ink' | 'mono-slate'
+  | 'blueprint-mint' | 'blueprint-rose'
+  | 'news-ink' | 'news-sage'
+  | 'vapor-lime' | 'vapor-ice'
+  | 'memphis-sky' | 'memphis-mint'
+  | 'chalk-rose' | 'chalk-sepia';
 
 export interface Palette {
   id: PaletteId;

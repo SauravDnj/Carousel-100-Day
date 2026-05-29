@@ -1,7 +1,7 @@
 'use client';
 
 import { ThemeId } from '@/lib/types';
-import { ThemeSlideProps } from './types';
+import { ThemeSlideProps, SLIDE_W, SLIDE_H } from './types';
 import RetroGridSlide from './RetroGrid';
 import DarkCyberSlide from './DarkCyber';
 import MinimalSwissSlide from './MinimalSwiss';
@@ -23,8 +23,14 @@ import CassetteSlide from './Cassette';
 import NotebookGridSlide from './NotebookGrid';
 import GlassDarkSlide from './GlassDark';
 import MonoEditorialSlide from './MonoEditorial';
+import BlueprintSlide from './Blueprint';
+import NewsprintSlide from './Newsprint';
+import VaporwaveSlide from './Vaporwave';
+import MemphisSlide from './Memphis';
+import ChalkboardSlide from './Chalkboard';
+import ImageSlide, { ImageOverlay } from './ImageSlide';
 
-export default function ThemeSlide({ themeId, ...props }: ThemeSlideProps & { themeId: ThemeId }) {
+function renderTheme(themeId: ThemeId, props: ThemeSlideProps) {
   switch (themeId) {
     case 'retro-grid':     return <RetroGridSlide {...props} />;
     case 'dark-cyber':     return <DarkCyberSlide {...props} />;
@@ -47,5 +53,31 @@ export default function ThemeSlide({ themeId, ...props }: ThemeSlideProps & { th
     case 'notebook-grid':  return <NotebookGridSlide {...props} />;
     case 'glass-dark':     return <GlassDarkSlide {...props} />;
     case 'mono-editorial': return <MonoEditorialSlide {...props} />;
+    case 'blueprint':      return <BlueprintSlide {...props} />;
+    case 'newsprint':      return <NewsprintSlide {...props} />;
+    case 'vaporwave':      return <VaporwaveSlide {...props} />;
+    case 'memphis':        return <MemphisSlide {...props} />;
+    case 'chalkboard':     return <ChalkboardSlide {...props} />;
   }
+}
+
+export default function ThemeSlide({ themeId, ...props }: ThemeSlideProps & { themeId: ThemeId }) {
+  // A dedicated image slide is rendered the same way across every theme.
+  if (props.slide.kind === 'image') {
+    return <ImageSlide {...props} />;
+  }
+
+  const themed = renderTheme(themeId, props);
+
+  // Any other slide can carry an uploaded image — show it as a framed photo overlay.
+  if (props.slide.image) {
+    return (
+      <div style={{ position: 'relative', width: SLIDE_W, height: SLIDE_H }}>
+        {themed}
+        <ImageOverlay slide={props.slide} palette={props.palette} />
+      </div>
+    );
+  }
+
+  return themed;
 }

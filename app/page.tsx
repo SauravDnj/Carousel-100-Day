@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CURRICULUM, TOTAL_DAYS, POSTS_PER_DAY } from '@/lib/curriculum';
-import { Category } from '@/lib/types';
+import { BRAND, Category } from '@/lib/types';
 import { useAllStatuses, countByStatus } from '@/lib/post-status';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -76,12 +76,12 @@ export default function Home() {
   };
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '40px 32px 80px' }}>
+    <main className="cf-main" style={{ maxWidth: 1400, margin: '0 auto', padding: '40px 32px 80px' }}>
       <header style={{ marginBottom: 40 }}>
         <div style={{ fontFamily: 'JetBrains Mono', fontSize: 13, letterSpacing: '0.2em', color: '#888', textTransform: 'uppercase' }}>
           @saurav_dnj_24 · github.com/SauravDnj · linkedin.com/in/sauravdnj
         </div>
-        <h1 style={{ fontSize: 56, fontWeight: 700, margin: '12px 0 8px', letterSpacing: '-0.03em' }}>
+        <h1 className="cf-h1" style={{ fontSize: 56, fontWeight: 700, margin: '12px 0 8px', letterSpacing: '-0.03em' }}>
           100-Day Carousel Factory
         </h1>
         <p style={{ color: '#9aa', fontSize: 18, maxWidth: 760, lineHeight: 1.5 }}>
@@ -140,7 +140,7 @@ export default function Home() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+      <div className="cf-cardgrid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
         {filtered.map(d => (
           <div key={d.day} style={{
             background: '#111', border: '1px solid #1f1f1f', borderRadius: 14,
@@ -190,8 +190,16 @@ export default function Home() {
         ))}
       </div>
 
-      <footer style={{ marginTop: 80, color: '#555', fontSize: 12, textAlign: 'center' }}>
-        Built by <a href="https://linkedin.com/in/sauravdnj" style={{ color: '#888' }}>Saurav Danej</a> · 500 posts · 21 themes · 61 palettes
+      <footer style={{ marginTop: 80, color: '#555', fontSize: 12, textAlign: 'center', lineHeight: 1.8 }}>
+        <div>
+          Built by Saurav Danej ·{' '}
+          <a href={`https://instagram.com/${BRAND.instagram}`} target="_blank" rel="noopener noreferrer" style={{ color: '#888' }}>Instagram</a>
+          {' · '}
+          <a href={`https://github.com/${BRAND.github}`} target="_blank" rel="noopener noreferrer" style={{ color: '#888' }}>GitHub</a>
+          {' · '}
+          <a href={`https://linkedin.com/in/${BRAND.linkedin}`} target="_blank" rel="noopener noreferrer" style={{ color: '#888' }}>LinkedIn</a>
+        </div>
+        <div>500 posts · 26 themes · 132 palettes</div>
       </footer>
     </main>
   );

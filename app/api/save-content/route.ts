@@ -49,6 +49,7 @@ function renderSlide(s: any): string {
   if (s.code)     parts.push(`code: ${JSON.stringify(s.code)}`);
   if (s.codeLang) parts.push(`codeLang: ${JSON.stringify(s.codeLang)}`);
   if (s.sticker)  parts.push(`sticker: ${JSON.stringify(s.sticker)}`);
+  if (s.emoji)    parts.push(`emoji: ${JSON.stringify(s.emoji)}`);
   if (s.diagram)  parts.push(`diagram: ${JSON.stringify(s.diagram)}`);
   return `{ ${parts.join(', ')} }`;
 }

@@ -1,4 +1,4 @@
-import { Category, PostAngle, PostTopic, SlideContent, DayTopic } from './types';
+import { Category, DiagramSpec, PostAngle, PostTopic, SlideContent, DayTopic } from './types';
 import { getPost } from './curriculum';
 import { SAMPLE_CONTENT } from './sample-content';
 
@@ -198,116 +198,293 @@ const CATEGORY_FLAVOUR: Record<Category, CategoryFlavour> = {
   },
 };
 
+// Extra depth material — a one-line mental model + 3 key terms per category.
+// Kept separate from CATEGORY_FLAVOUR so it can be added without touching the
+// existing entries. Powers the "Mental model" + "Key terms" slides on every post.
+interface CategoryDepth { mentalModel: string; keyTerms: string[]; deeper: string }
+const CATEGORY_DEPTH: Record<Category, CategoryDepth> = {
+  'AI Fundamentals': {
+    mentalModel: 'Think of AI as a very fast pattern-matcher, not a thinker. It has read more than any human, yet understands nothing — it predicts what usually comes next. Useful when patterns hold, dangerous when they do not.',
+    keyTerms: ['Model — a learned function from inputs to outputs', 'Inference — running a trained model on new data', 'Training — fitting the model to examples', 'Generalisation — performing on data it never saw'],
+    deeper: 'The leap from "narrow" to "general" is not just scale — it is the difference between a tool tuned for one task and a system that transfers across tasks. Almost everything shipping today is narrow, even when the marketing says otherwise.',
+  },
+  'Machine Learning': {
+    mentalModel: 'ML is curve-fitting with discipline. You show the machine labelled examples, it finds the line/boundary that separates them, and you pray that line also holds on data it has not seen. The whole craft is making that prayer come true.',
+    keyTerms: ['Feature — an input signal the model reads', 'Label — the answer you want predicted', 'Loss — how wrong the model is right now', 'Overfitting — memorising train data, failing on new'],
+    deeper: 'The biggest lever is almost never the algorithm — it is the features and the data quality. A boring model on great features beats a fancy model on raw noise nearly every time.',
+  },
+  'Deep Learning': {
+    mentalModel: 'A neural net is a stack of tunable knobs (weights). Data flows forward to a prediction; the error flows backward and nudges every knob a little. Repeat millions of times and the knobs settle into something that works.',
+    keyTerms: ['Neuron — a weighted sum + nonlinearity', 'Backprop — how gradients flow backward', 'Epoch — one full pass over the data', 'Learning rate — how big each update step is'],
+    deeper: 'Depth lets the network build features on top of features — edges → shapes → objects. That hierarchy is why deep nets crush hand-engineered features on images, audio, and text.',
+  },
+  'NLP & LLMs': {
+    mentalModel: 'An LLM is autocomplete trained on the internet. Give it text, it predicts the next token, again and again. Everything clever it does — reasoning, coding, translation — is an emergent side-effect of getting really, really good at that one game.',
+    keyTerms: ['Token — a chunk of text (~¾ of a word)', 'Context window — how much it can read at once', 'Temperature — randomness of the output', 'Embedding — text turned into a vector of meaning'],
+    deeper: 'Most LLM products fail on evaluation, not on prompting. The teams that win build a test set of real inputs first, then tune prompt + model against it — instead of eyeballing one nice demo.',
+  },
+  'RAG': {
+    mentalModel: 'RAG is an open-book exam for an LLM. Instead of trusting the model to remember, you retrieve the relevant pages first and paste them into the prompt. The model then answers from the page in front of it, with a citation.',
+    keyTerms: ['Chunk — a passage you index and retrieve', 'Embedding — vector that captures meaning', 'Retriever — finds the top-k relevant chunks', 'Reranker — reorders chunks by true relevance'],
+    deeper: 'Hybrid retrieval (keyword BM25 + dense vectors) plus a reranker beats pure vector search almost everywhere. And you must measure retrieval quality separately from answer quality — they fail for different reasons.',
+  },
+  'AI Agents': {
+    mentalModel: 'An agent is an LLM in a loop with tools. It thinks, calls a tool, reads the result, thinks again — until the task is done or a budget runs out. The model is the brain; the tools are the hands.',
+    keyTerms: ['Tool — a function the model can call', 'Tool schema — the typed contract for a tool', 'Loop / step limit — guard against runaway cost', 'Trace — the logged sequence of thoughts + calls'],
+    deeper: 'Tool design beats prompt engineering. A tool with a tight schema and short, honest error messages teaches the model more than paragraphs of "you are a helpful agent" preamble ever will.',
+  },
+  'Computer Vision': {
+    mentalModel: 'To a model, an image is just a grid of numbers. Convolutions slide little filters over that grid to detect edges, then textures, then parts, then objects — building understanding from the pixels up.',
+    keyTerms: ['Pixel normalisation — scaling values to a fixed range', 'Convolution — a sliding filter over the image', 'Bounding box — a detected object\'s rectangle', 'IoU — overlap score between boxes'],
+    deeper: 'In 2026 almost every CV task starts by fine-tuning a pretrained model on a few hundred labelled images. Training from scratch is rare — transfer learning does the heavy lifting.',
+  },
+  'Python': {
+    mentalModel: 'Python optimises for the reader, not the CPU. It is slow on paper but fast to write, and its ecosystem means the heavy lifting (NumPy, Pandas, Torch) is C under the hood. You write the glue; libraries do the work.',
+    keyTerms: ['List vs tuple — mutable vs fixed sequence', 'Comprehension — build a list in one expression', 'Decorator — a function that wraps a function', 'Generator — lazy iterator that yields values'],
+    deeper: 'Modern Python is type-hinted, async where it helps, and uv-managed. If your project skips all three you are paying a tax — slower onboarding, more runtime bugs, and dependency drift.',
+  },
+  'JavaScript / TypeScript': {
+    mentalModel: 'JavaScript runs everywhere; TypeScript is JavaScript with a spell-checker for types. The types vanish at runtime but catch a whole class of bugs at compile time — they are documentation that actually stays true.',
+    keyTerms: ['Promise — a value that arrives later', 'async/await — sync-looking async code', 'Type vs interface — two ways to shape data', 'Union type — "this OR that" in the type system'],
+    deeper: 'Spend real time on your types. A precise type at a boundary (API response, function arg) prevents bugs you would otherwise find in production at 2 AM.',
+  },
+  'SQL Databases': {
+    mentalModel: 'A relational DB is a spreadsheet that takes correctness seriously — typed columns, enforced relationships, and transactions that are all-or-nothing. Indexes are the table of contents that turn a full scan into an instant lookup.',
+    keyTerms: ['Index — a lookup structure for fast reads', 'JOIN — combine rows across tables', 'Transaction — all-or-nothing unit of work', 'EXPLAIN — the query planner\'s playbook'],
+    deeper: 'Read EXPLAIN ANALYZE on your slowest queries before touching the schema. Most performance wins live in a missing index or an N+1 pattern, not in clever redesigns.',
+  },
+  'NoSQL Databases': {
+    mentalModel: 'NoSQL trades SQL\'s strict structure for speed and scale on specific access patterns. You shape the data the way you read it — denormalised, duplicated, fast. The schema still exists; you just enforce it in the app.',
+    keyTerms: ['Key-value — the simplest, fastest store', 'Document — JSON-shaped records', 'TTL — auto-expiry on a key', 'Sharding — splitting data across machines'],
+    deeper: 'Pick the store by access pattern, not by hype: Redis for hot key-value, Postgres for relations, a vector DB for similarity, a warehouse for analytics. Most apps need two, not one.',
+  },
+  'Vector Databases': {
+    mentalModel: 'A vector DB stores meaning as coordinates. Similar things land near each other in high-dimensional space, so "find related" becomes "find nearest" — a geometry problem an ANN index can answer in milliseconds.',
+    keyTerms: ['Embedding — meaning as a vector', 'Cosine similarity — angle-based closeness', 'ANN — approximate nearest-neighbour search', 'Metadata filter — narrow before you search'],
+    deeper: 'The DB is the easy part. The hard parts are choosing the embedding model, the chunking strategy, and a reranker — those decide whether retrieval is actually relevant.',
+  },
+  'AI Tools': {
+    mentalModel: 'Treat model providers like cloud regions: powerful, but interchangeable and occasionally down. Put your own thin interface in front, so swapping GPT for Claude for a local model is a config change, not a rewrite.',
+    keyTerms: ['SDK — the provider\'s client library', 'Rate limit — requests allowed per window', 'Fallback — backup model when the primary fails', 'Token cost — what each call actually bills'],
+    deeper: 'Abstract the model behind your own interface, always wire a fallback, and keep an eval set. Frontier models change every few months — design for swap-ability from day one.',
+  },
+  'Prompt Engineering': {
+    mentalModel: 'A prompt is a spec, not a wish. The model fills every gap you leave with a guess, so the craft is removing ambiguity: a role, a format, a couple of examples, and a hard "do not" list.',
+    keyTerms: ['System prompt — sets the persona + rules', 'Few-shot — examples baked into the prompt', 'Output schema — the exact shape you require', 'Eval — scoring prompts against real inputs'],
+    deeper: 'Build the eval set first, then write the prompt, then iterate the prompt against the eval. Without a scoreboard you are not improving — you are just memorising one happy-path example.',
+  },
+  'MLOps': {
+    mentalModel: 'MLOps is DevOps for models, where the data is part of the code. A deploy is reproducible only if you version the model, the data, and the config together — otherwise "it worked yesterday" becomes a haunting.',
+    keyTerms: ['Registry — versioned store of models', 'Drift — input distribution shifting over time', 'Canary — release to a small slice first', 'Lineage — what data + code made this model'],
+    deeper: 'Treat a model like a database migration: versioned, reviewed, and rollback-able. Most AI projects die in production, not in training — invest in the deploy path early.',
+  },
+  'Data Engineering': {
+    mentalModel: 'A data pipeline is plumbing: raw data flows in, gets cleaned and reshaped at each stage, and lands somewhere queryable. The whole game is keeping the water clean and the pipes from bursting on a re-run.',
+    keyTerms: ['Idempotency — re-runs do not double-count', 'ETL/ELT — extract, transform, load order', 'Partition — split data for cheap scans', 'Lineage — tracking data from source to table'],
+    deeper: 'Idempotency, lineage, and tests are the three pillars. Get those right and the orchestration tool barely matters — get them wrong and no tool will save your dashboards.',
+  },
+  'Math for ML': {
+    mentalModel: 'The math behind ML is mostly geometry in disguise. Vectors are arrows, dot products measure alignment, gradients point uphill. Build the picture first and the formulas stop looking scary.',
+    keyTerms: ['Vector — a point/arrow in space', 'Dot product — how aligned two vectors are', 'Gradient — direction of steepest increase', 'Matrix — a transformation of space'],
+    deeper: 'Intuition → derivation → implementation, in that order. Watch 3Blue1Brown for the picture, derive it once on paper, then code it in NumPy. Skipping the picture is why math feels hard.',
+  },
+  'Production AI': {
+    mentalModel: 'Shipping AI is plumbing plus seatbelts. The model is one call in a system that must stream, retry, cap cost, redact PII, and degrade gracefully. Slow beats broken; partial beats nothing; fallback beats a 500.',
+    keyTerms: ['Streaming — tokens as they generate', 'Circuit breaker — stop calling a dead service', 'Cost cap — max spend per request', 'PII redaction — scrub data before it leaves'],
+    deeper: 'Design for graceful degradation. A cached or smaller-model answer that arrives beats a perfect answer that times out — users feel latency and outages far more than a slight quality dip.',
+  },
+};
+
 function stripTheme(theme: string): string {
   return theme.replace(/^(What is|The|A Brief|A )\s+/i, '').replace(/[?!.]+$/, '');
 }
 function joinExamples(arr: string[]): string {
   return arr.slice(0, 5).join(' · ');
 }
+function short(s: string, n = 24): string {
+  return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
+}
+
+// ─── Auto-generated diagrams ───────────────────────────────────────
+// Build a sensible DiagramSpec from the category flavour + topic so EVERY
+// template post ships with at least one real visual, not just walls of text.
+
+function mindmapFor(f: CategoryFlavour, t: string): DiagramSpec {
+  return { kind: 'mindmap', center: t, branches: [
+    { label: 'Used for',    sub: f.examples.slice(0, 2).map(s => short(s, 20)) },
+    { label: 'Tooling',     sub: f.stack.slice(0, 2).map(s => short(s, 20)) },
+    { label: 'Why it wins', sub: f.whyMatters.slice(0, 2).map(s => short(s, 22)) },
+    { label: 'Watch out',   sub: f.pitfalls.slice(0, 2).map(s => short(s, 22)) },
+  ] };
+}
+
+function pipelineFor(t: string): DiagramSpec {
+  return { kind: 'pipeline', stages: [
+    { label: 'Prepare',   detail: 'clean + shape the inputs' },
+    { label: 'Transform', detail: `the core ${short(t, 14)} step` },
+    { label: 'Interpret', detail: 'check + calibrate output' },
+    { label: 'Iterate',   detail: 'measure, then improve' },
+  ] };
+}
+
+function skipVsMasterFor(f: CategoryFlavour): DiagramSpec {
+  return { kind: 'compare',
+    left:  { title: 'Skip it', items: f.pitfalls.slice(0, 4).map(s => short(s, 30)) },
+    right: { title: 'Master it', items: f.whyMatters.slice(0, 4).map(s => short(s, 30)) },
+  };
+}
+
+function flowFor(t: string): DiagramSpec {
+  return { kind: 'flow', nodes: [
+    { label: 'Input',    sub: 'raw data' },
+    { label: short(t, 12), sub: 'the engine' },
+    { label: 'Output',   sub: 'result' },
+    { label: 'Feedback', sub: 'improve' },
+  ] };
+}
+
+function debugDecisionFor(): DiagramSpec {
+  return { kind: 'decision', root: {
+    question: 'Output looks wrong?',
+    yes: { question: 'Checked the data?', yes: { leaf: 'Fix data first' }, no: { leaf: 'Inspect inputs' } },
+    no:  { question: 'Have a baseline?',        yes: { leaf: 'Ship + monitor' },         no: { leaf: 'Build a baseline' } },
+  } };
+}
+
+const CATEGORY_EMOJI: Record<Category, string> = {
+  'AI Fundamentals': '🤖', 'Machine Learning': '📊', 'Deep Learning': '🧠',
+  'NLP & LLMs': '💬', 'RAG': '🔎', 'AI Agents': '🛠️', 'Computer Vision': '👁️',
+  'Python': '🐍', 'JavaScript / TypeScript': '🟨', 'SQL Databases': '🗄️',
+  'NoSQL Databases': '⚡', 'Vector Databases': '🧭', 'AI Tools': '🧰',
+  'Prompt Engineering': '✍️', 'MLOps': '🚀', 'Data Engineering': '🔧',
+  'Math for ML': '📐', 'Production AI': '🏭',
+};
 
 // 8-9 slide skeletons per angle, each with richer body text + multi-bullet structure +
 // a topical code block. Used when a post doesn't have hand-authored content.
 function templateForAngle(theme: string, angle: PostAngle, category: Category): SlideContent[] {
   const f = CATEGORY_FLAVOUR[category];
+  const d = CATEGORY_DEPTH[category];
   const t = stripTheme(theme);
+  const e = CATEGORY_EMOJI[category];
+
+  // Reusable depth slides shared across angles.
+  const mentalModelSlide: SlideContent = { kind: 'definition', title: 'Mental model', body: d.mentalModel, emoji: '🧠' };
+  const keyTermsSlide: SlideContent = { kind: 'tips', title: 'Key terms to know', bullets: d.keyTerms, emoji: '📖' };
+  const goDeeperSlide: SlideContent = { kind: 'visual', title: 'Going deeper', body: d.deeper, emoji: '🔬' };
 
   switch (angle) {
     case 'Concept':
       return [
-        { kind: 'cover', title: theme, sticker: 'DAY-X' },
-        { kind: 'definition', title: `What is ${t}?`, body: `${t} is one of the foundational ideas you keep running into when you build serious systems in ${category.toLowerCase()}. The first time you meet it, it feels abstract — a definition from a textbook. The second time, it explains a bug you spent two days chasing in production. By the third encounter, you start reaching for it on instinct. That's the moment fundamentals stop being theory and start saving you hours every week. This carousel covers the one-line definition, why it matters in real engineering, how it actually works under the hood, a minimal working example, and the trap every beginner falls into.` },
-        { kind: 'why', title: 'Why it matters', bullets: f.whyMatters },
+        { kind: 'cover', title: theme, sticker: 'DAY-X', emoji: e },
+        { kind: 'definition', title: `What is ${t}?`, body: `${t} is one of the foundational ideas you keep running into when you build serious systems in ${category.toLowerCase()}. The first time you meet it, it feels abstract — a definition from a textbook. The second time, it explains a bug you spent two days chasing in production. By the third encounter, you start reaching for it on instinct. That's the moment fundamentals stop being theory and start saving you hours every week. This carousel covers the one-line definition, why it matters in real engineering, how it actually works under the hood, a minimal working example, and the trap every beginner falls into.`, emoji: '💡' },
+        { kind: 'diagram', title: `The ${t} map`, diagram: mindmapFor(f, short(t, 14)), emoji: '🗺️' },
+        mentalModelSlide,
+        { kind: 'why', title: 'Why it matters', bullets: f.whyMatters, emoji: '🎯' },
         { kind: 'how', title: 'The core idea', bullets: [
           `Inputs flow into ${t}; outputs come out shaped by data + training, not hand-written rules.`,
           'The function inside is learned from examples — you give it pairs of (input, correct output) and it figures out the mapping.',
           'More data + better signal usually beats a smarter algorithm — Andrew Ng calls this "data-centric AI".',
           'Iteration matters more than the first model you ship — the v1 will be wrong in interesting ways.',
           'Most engineering effort is in the data pipeline + eval setup, not in the model itself.',
-        ] },
-        { kind: 'visual', title: 'Where it shows up', body: `In production you'll see ${t} powering — ${joinExamples(f.examples)}. The same primitive shows up across very different products because it solves a general class of problem. Once you spot the pattern in one domain, you start spotting it everywhere — and that's the moment senior engineers start trusting your architecture decisions. If your team has any of these features on the roadmap, ${t} is going to come up in design review.` },
-        { kind: 'code', title: 'A starting point', code: f.codeSeed.example, codeLang: f.codeSeed.lang },
-        { kind: 'tips', title: 'Tools in this stack', bullets: f.stack.slice(0, 5) },
-        { kind: 'mistake', title: 'Beginner trap', body: f.beginnerTrap + ' If you remember one thing from this slide, make it that. The more confident the AI sounds, the more careful you need to be — confidence is not a substitute for correctness. The single biggest jump between a junior and a senior engineer in this space is the habit of asking "but how would I verify this?" before shipping.' },
-        { kind: 'cta', title: 'Save this. Follow for more.', body: 'Tomorrow: the same topic from a different angle. Tag a friend who\'s learning — and drop a comment with the topic you want covered next.', sticker: 'DAY-X' },
+        ], emoji: '🧩' },
+        keyTermsSlide,
+        { kind: 'visual', title: 'Where it shows up', body: `In production you'll see ${t} powering — ${joinExamples(f.examples)}. The same primitive shows up across very different products because it solves a general class of problem. Once you spot the pattern in one domain, you start spotting it everywhere — and that's the moment senior engineers start trusting your architecture decisions. If your team has any of these features on the roadmap, ${t} is going to come up in design review.`, emoji: '🌍' },
+        { kind: 'code', title: 'A starting point', code: f.codeSeed.example, codeLang: f.codeSeed.lang, emoji: '💻' },
+        { kind: 'tips', title: 'Tools in this stack', bullets: f.stack.slice(0, 5), emoji: '🧰' },
+        { kind: 'mistake', title: 'Beginner trap', body: f.beginnerTrap + ' If you remember one thing from this slide, make it that. The more confident the AI sounds, the more careful you need to be — confidence is not a substitute for correctness. The single biggest jump between a junior and a senior engineer in this space is the habit of asking "but how would I verify this?" before shipping.', emoji: '⚠️' },
+        { kind: 'cta', title: 'Save this. Follow for more.', body: 'Tomorrow: the same topic from a different angle. Tag a friend who\'s learning — and drop a comment with the topic you want covered next.', sticker: 'DAY-X', emoji: '🔖' },
       ];
     case 'Why It Matters':
       return [
-        { kind: 'cover', title: `Why ${t} matters`, sticker: 'DAY-X' },
-        { kind: 'definition', title: 'The problem before', body: `Teams that skip ${t} end up patching symptoms forever. Every bug feels like a mystery. Every paper feels like noise. Worse — hiring managers can tell within five minutes whether someone has actually used this idea or just memorised a definition. The pattern repeats across companies, stacks, and years.` },
-        { kind: 'visual', title: 'Real impact today', body: `Used right now in — ${joinExamples(f.examples)}. The same idea, deployed thousands of times a second across products you use without thinking. Quiet engine behind a surprising amount of what works.` },
-        { kind: 'why', title: 'Concrete reasons it matters', bullets: f.whyMatters },
+        { kind: 'cover', title: `Why ${t} matters`, sticker: 'DAY-X', emoji: e },
+        { kind: 'definition', title: 'The problem before', body: `Teams that skip ${t} end up patching symptoms forever. Every bug feels like a mystery. Every paper feels like noise. Worse — hiring managers can tell within five minutes whether someone has actually used this idea or just memorised a definition. The pattern repeats across companies, stacks, and years.`, emoji: '🧩' },
+        { kind: 'visual', title: 'Real impact today', body: `Used right now in — ${joinExamples(f.examples)}. The same idea, deployed thousands of times a second across products you use without thinking. Quiet engine behind a surprising amount of what works.`, emoji: '🌍' },
+        mentalModelSlide,
+        { kind: 'why', title: 'Concrete reasons it matters', bullets: f.whyMatters, emoji: '🎯' },
+        { kind: 'diagram', title: 'Skip it vs master it', diagram: skipVsMasterFor(f), emoji: '⚖️' },
+        goDeeperSlide,
         { kind: 'how', title: 'Where it shows up in your day', bullets: [
           'In production code — search, ranking, fraud, personalisation, support.',
           'In research papers — every recent paper builds on these primitives.',
           'In cloud APIs — the abstractions hide it; understanding helps you debug.',
           'In hiring loops — basic literacy at any senior+ level now.',
           'In product strategy — knowing what\'s possible shapes what you can ship.',
-        ] },
-        { kind: 'mistake', title: 'If you skip it…', body: `The classic failure mode is — ${f.pitfall} You\'ll hit it at the worst possible time, in production, with users watching. Better to grok it now in a quiet hour than at 2 AM with a pager going off.` },
-        { kind: 'code', title: 'Even the simplest version', code: f.codeSeed.example, codeLang: f.codeSeed.lang },
+        ], emoji: '🗓️' },
+        { kind: 'mistake', title: 'If you skip it…', body: `The classic failure mode is — ${f.pitfall} You\'ll hit it at the worst possible time, in production, with users watching. Better to grok it now in a quiet hour than at 2 AM with a pager going off.`, emoji: '⚠️' },
+        { kind: 'code', title: 'Even the simplest version', code: f.codeSeed.example, codeLang: f.codeSeed.lang, emoji: '💻' },
         { kind: 'tips', title: 'Takeaway', bullets: [
           'Master fundamentals — they have a long shelf life.',
           'Build intuition before you memorise the formula.',
           'Apply it on a small project this week to lock it in.',
           'Teach it to someone — that\'s how you find your gaps.',
           'Read one related paper or RFC each month.',
-        ] },
-        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X' },
+        ], emoji: '✅' },
+        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X', emoji: '🔖' },
       ];
     case 'How It Works':
       return [
-        { kind: 'cover', title: `How ${t} works`, sticker: 'DAY-X' },
-        { kind: 'visual', title: 'The big picture', body: `Zoom out first. There are a few moving parts that fit on a napkin — inputs go in, get transformed, outputs come out, and feedback shapes the next iteration. Once you can sketch this, the rest is detail you can fill in as you need it.` },
-        { kind: 'steps', title: 'Step 1 — Prepare', body: `Get your inputs into the right shape. This is the boring step everyone skips, and it\'s where most production bugs live. Normalise, deduplicate, handle nulls, check dtypes, validate ranges. Eighty percent of "model is broken" is actually "data is broken".` },
-        { kind: 'steps', title: 'Step 2 — Run the core', body: `Apply the operation. The math can look intimidating in papers, but the intent is simple — turn inputs into a useful internal representation. Whether it\'s a hash, a linear projection, or 96 transformer layers, the abstraction is the same: input → representation.` },
-        { kind: 'steps', title: 'Step 3 — Interpret', body: `Take the output and check it makes sense. Confidence is not correctness — calibration matters. Plot distributions, spot-check edge cases, compare against a baseline. If the answer always looks right, you probably haven\'t tested hard enough.` },
+        { kind: 'cover', title: `How ${t} works`, sticker: 'DAY-X', emoji: '⚙️' },
+        { kind: 'visual', title: 'The big picture', body: `Zoom out first. There are a few moving parts that fit on a napkin — inputs go in, get transformed, outputs come out, and feedback shapes the next iteration. Once you can sketch this, the rest is detail you can fill in as you need it.`, emoji: '🔭' },
+        { kind: 'diagram', title: 'The pipeline', diagram: pipelineFor(t), emoji: '🔁' },
+        mentalModelSlide,
+        { kind: 'steps', title: 'Step 1 — Prepare', body: `Get your inputs into the right shape. This is the boring step everyone skips, and it\'s where most production bugs live. Normalise, deduplicate, handle nulls, check dtypes, validate ranges. Eighty percent of "model is broken" is actually "data is broken".`, emoji: '🧹' },
+        { kind: 'steps', title: 'Step 2 — Run the core', body: `Apply the operation. The math can look intimidating in papers, but the intent is simple — turn inputs into a useful internal representation. Whether it\'s a hash, a linear projection, or 96 transformer layers, the abstraction is the same: input → representation.`, emoji: '⚙️' },
+        { kind: 'steps', title: 'Step 3 — Interpret', body: `Take the output and check it makes sense. Confidence is not correctness — calibration matters. Plot distributions, spot-check edge cases, compare against a baseline. If the answer always looks right, you probably haven\'t tested hard enough.`, emoji: '🔍' },
+        keyTermsSlide,
         { kind: 'how', title: 'Putting it together', bullets: [
           'Inputs flow forward through the pipeline.',
           'Errors / gradients flow backward when you train.',
           'Each iteration nudges parameters in a better direction.',
           'You stop when validation loss plateaus — not training loss.',
           'Then you measure on a held-out test set you\'ve never peeked at.',
-        ] },
-        { kind: 'code', title: 'Reference implementation', code: f.codeSeed.example, codeLang: f.codeSeed.lang },
-        { kind: 'tips', title: 'Edge cases + pitfalls', bullets: f.pitfalls.slice(0, 5) },
-        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X' },
+        ], emoji: '🧩' },
+        { kind: 'code', title: 'Reference implementation', code: f.codeSeed.example, codeLang: f.codeSeed.lang, emoji: '💻' },
+        { kind: 'tips', title: 'Edge cases + pitfalls', bullets: f.pitfalls.slice(0, 5), emoji: '🪤' },
+        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X', emoji: '🔖' },
       ];
     case 'Code Example':
       return [
-        { kind: 'cover', title: `${t} — in code`, sticker: 'DAY-X' },
-        { kind: 'definition', title: 'Setup', body: `Before any code runs, get the stack right. For ${t} you\'ll want: ${f.stack.slice(0, 3).join(', ')}. Pinned versions in your lockfile. Virtual environment. Don\'t mix global + project installs — that\'s a half-day of debugging waiting to happen.` },
-        { kind: 'code', title: 'Imports + setup', code: codeImports(f), codeLang: f.codeSeed.lang },
-        { kind: 'code', title: 'The core operation', code: f.codeSeed.example, codeLang: f.codeSeed.lang },
-        { kind: 'visual', title: 'What just happened', body: `We took an input, applied the operation, and produced an output we can use. The fun part starts when you scale this up — real data, real volume, real error modes. The 10-line version teaches you the API; the 1000-line version teaches you the system.` },
+        { kind: 'cover', title: `${t} — in code`, sticker: 'DAY-X', emoji: '💻' },
+        { kind: 'definition', title: 'Setup', body: `Before any code runs, get the stack right. For ${t} you\'ll want: ${f.stack.slice(0, 3).join(', ')}. Pinned versions in your lockfile. Virtual environment. Don\'t mix global + project installs — that\'s a half-day of debugging waiting to happen.`, emoji: '📦' },
+        keyTermsSlide,
+        { kind: 'code', title: 'Imports + setup', code: codeImports(f), codeLang: f.codeSeed.lang, emoji: '📥' },
+        { kind: 'code', title: 'The core operation', code: f.codeSeed.example, codeLang: f.codeSeed.lang, emoji: '⚙️' },
+        { kind: 'visual', title: 'What just happened', body: `We took an input, applied the operation, and produced an output we can use. The fun part starts when you scale this up — real data, real volume, real error modes. The 10-line version teaches you the API; the 1000-line version teaches you the system.`, emoji: '✨' },
+        { kind: 'diagram', title: 'Data flow', diagram: flowFor(t), emoji: '➡️' },
+        mentalModelSlide,
         { kind: 'tips', title: 'Variations to try', bullets: [
           'Vectorise — replace your inner loop with a NumPy or DataFrame op.',
           'Wrap it in a class with a clean ` + "`__init__`" + ` + ` + "`fit`" + ` + ` + "`predict`" + ` API.',
           'Add input validation (types, ranges, required fields).',
           'Write a test that runs in <1 second.',
           'Add structured logging so you can debug in prod.',
-        ] },
-        { kind: 'mistake', title: 'Watch out', body: `Don\'t silently catch errors — they\'re the bug telling you something. Don\'t hardcode magic numbers — extract them to a config. Don\'t skip tests because "it works on my machine". And the classic failure mode here is — ${f.pitfall}` },
-        { kind: 'code', title: 'Make it production-ready', code: codeProductionish(f), codeLang: f.codeSeed.lang },
-        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X' },
+        ], emoji: '🧪' },
+        { kind: 'mistake', title: 'Watch out', body: `Don\'t silently catch errors — they\'re the bug telling you something. Don\'t hardcode magic numbers — extract them to a config. Don\'t skip tests because "it works on my machine". And the classic failure mode here is — ${f.pitfall}`, emoji: '⚠️' },
+        { kind: 'code', title: 'Make it production-ready', code: codeProductionish(f), codeLang: f.codeSeed.lang, emoji: '🚀' },
+        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X', emoji: '🔖' },
       ];
     default:
     case 'Common Mistakes':
       return [
-        { kind: 'cover', title: `${t} — common mistakes`, sticker: 'DAY-X' },
-        { kind: 'mistake', title: 'Mistake #1', body: `${f.pitfalls[0] || f.pitfall} You\'ll spot this one in code reviews from juniors who learned the API but not the why. The fix is almost always upstream — change how data flows in, not how the model is configured.` },
+        { kind: 'cover', title: `${t} — common mistakes`, sticker: 'DAY-X', emoji: '🚫' },
+        mentalModelSlide,
+        { kind: 'mistake', title: 'Mistake #1', body: `${f.pitfalls[0] || f.pitfall} You\'ll spot this one in code reviews from juniors who learned the API but not the why. The fix is almost always upstream — change how data flows in, not how the model is configured.`, emoji: '❌' },
         { kind: 'mistake', title: 'Mistake #2', body: `${f.pitfalls[1] || 'Skipping the baseline.'} Without a baseline you can\'t tell if your fancy model is actually helping. A logistic regression on raw features should beat untrained intuition.` },
         { kind: 'mistake', title: 'Mistake #3', body: `${f.pitfalls[2] || 'Optimising the wrong metric.'} Accuracy on imbalanced data, BLEU on creative tasks, perplexity for chat quality — all classic mismatches. Pick the metric that reflects what users will feel.` },
         { kind: 'mistake', title: 'Mistake #4', body: `${f.pitfalls[3] || 'No experiment tracking.'} If you can\'t reproduce yesterday\'s result, your future self has lost the game. mlflow, W&B, or even a CSV is better than nothing.` },
         { kind: 'mistake', title: 'Mistake #5', body: `${f.pitfalls[4] || 'Shipping without monitoring.'} The model that worked at launch will drift. Alert on input distribution shift + key business metrics. Quietly broken is worse than loudly broken.` },
+        { kind: 'diagram', title: 'Debug it like this', diagram: debugDecisionFor(), emoji: '🧭' },
+        keyTermsSlide,
         { kind: 'tips', title: 'Recap — the cure', bullets: [
           'Read the assumptions of every model you use.',
           'Clean data first, train second.',
           'Pick a metric that maps to user outcomes.',
           'Build a baseline before anything fancy.',
           'Monitor in production from day one.',
-        ] },
-        { kind: 'code', title: 'A safer pattern', code: f.codeSeed.example, codeLang: f.codeSeed.lang },
-        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X' },
+        ], emoji: '🩹' },
+        { kind: 'code', title: 'A safer pattern', code: f.codeSeed.example, codeLang: f.codeSeed.lang, emoji: '🛡️' },
+        { kind: 'cta', title: 'Save this. Follow for more.', sticker: 'DAY-X', emoji: '🔖' },
       ];
   }
 }

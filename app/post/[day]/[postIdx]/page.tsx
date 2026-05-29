@@ -4,12 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import CarouselPreview from '@/components/CarouselPreview';
-import { downloadPngZip, downloadPdf, downloadMp4 } from '@/lib/download';
-import { getPalette, palettesForTheme, THEMES } from '@/lib/palettes';
+import VideoPreview from '@/components/VideoPreview';
+import { downloadPngZip, downloadPdf, downloadMp4, downloadGif, VideoTransition, VIDEO_TRANSITIONS } from '@/lib/download';
+import { getPalette, getTheme, palettesForTheme, THEMES } from '@/lib/palettes';
+import { buildPostImagePrompt, buildSlideImagePrompt, buildAllSlidesPrompt } from '@/lib/imagePrompt';
 import { getPostMeta, getSlides } from '@/lib/content';
+import { resolveSlides } from '@/lib/post-content';
 import { nextPost, prevPost, nextDay, prevDay, TOTAL_DAYS, POSTS_PER_DAY } from '@/lib/curriculum';
-import { BRAND, PaletteId, ThemeId } from '@/lib/types';
+import { BRAND, PaletteId, SlideContent, ThemeId } from '@/lib/types';
 import { usePostStatus } from '@/lib/post-status';
+import { usePreviewWidth } from '@/lib/useResponsive';
 
 export default function PostPage() {
   const params = useParams<{ day: string; postIdx: string }>();
@@ -22,6 +26,16 @@ export default function PostPage() {
   const [paletteId, setPaletteId] = useState<PaletteId>('retro-cream');
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Video / animation export options
+  const [transition, setTransition] = useState<VideoTransition>('none');
+  const [speedMs, setSpeedMs] = useState<number>(2000);
+  const [kenBurns, setKenBurns] = useState<boolean>(false);
+  // Image export quality: 1× ≈ HD (1080), 2× ≈ 2K, 3× ≈ 4K (default). Higher = sharper but slower.
+  const [quality, setQuality] = useState<1 | 2 | 3>(3);
+  // AI image-prompt target: whole post, all slides combined, or a specific slide index.
+  const [promptSel, setPromptSel] = useState<number | 'post' | 'all'>('post');
+  const previewW = usePreviewWidth(480);
+
   // when theme changes, switch to its default palette
   useEffect(() => {
     const theme = THEMES.find(t => t.id === themeId)!;
@@ -29,7 +43,12 @@ export default function PostPage() {
   }, [themeId]);
 
   const palette = useMemo(() => getPalette(paletteId), [paletteId]);
-  const slides = useMemo(() => getSlides(day, postIdx), [day, postIdx]);
+  // Start from the baseline (SSR-safe) then pick up any browser-saved edits/images.
+  const [slides, setSlides] = useState<SlideContent[]>(() => getSlides(day, postIdx));
+  useEffect(() => { setSlides(resolveSlides(day, postIdx)); }, [day, postIdx]);
+  // Per-post status (starred / done). MUST stay above the early return below so the
+  // hook order is stable even when a post URL is invalid (rules of hooks).
+  const [status, setStatus] = usePostStatus(day, postIdx);
 
   if (!meta) {
     return (
@@ -46,6 +65,23 @@ export default function PostPage() {
   const themePalettes = palettesForTheme(themeId);
 
   const caption = buildCaption(meta);
+
+  // AI image-generation prompt — adapts to the selected theme + palette + topic.
+  const promptCtx = {
+    theme: getTheme(themeId),
+    palette,
+    topic: meta.day.theme,
+    category: meta.day.category,
+    angle: meta.post.angle,
+  };
+  const promptIdx: number | 'post' | 'all' =
+    promptSel === 'all' ? 'all'
+      : typeof promptSel === 'number' && promptSel < slides.length ? promptSel
+        : 'post';
+  const imagePrompt =
+    promptIdx === 'all' ? buildAllSlidesPrompt(promptCtx, slides)
+      : promptIdx === 'post' ? buildPostImagePrompt(promptCtx)
+        : buildSlideImagePrompt(promptCtx, slides[promptIdx], promptIdx, slides.length);
 
   // Navigation
   const pP = prevPost(day, postIdx);
@@ -65,8 +101,6 @@ export default function PostPage() {
     router.push(`/post/${d}/${p}`);
   };
 
-  // Per-post status (starred / done)
-  const [status, setStatus] = usePostStatus(day, postIdx);
   const toggleStarred = () => setStatus(status === 'starred' ? null : 'starred');
   const toggleDone    = () => setStatus(status === 'done'    ? null : 'done');
 
@@ -86,7 +120,7 @@ export default function PostPage() {
   }
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '32px 24px 80px' }}>
+    <main className="cf-main" style={{ maxWidth: 1400, margin: '0 auto', padding: '32px 24px 80px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
         <button onClick={() => router.push('/')} style={ghostBtn}>← All days</button>
@@ -97,7 +131,7 @@ export default function PostPage() {
         </span>
       </div>
 
-      <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 6, letterSpacing: '-0.02em' }}>
+      <h1 className="cf-h1" style={{ fontSize: 36, fontWeight: 700, marginBottom: 6, letterSpacing: '-0.02em' }}>
         {meta.day.theme}
       </h1>
       <div style={{ color: '#888', fontSize: 14, marginBottom: 16 }}>
@@ -123,7 +157,7 @@ export default function PostPage() {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '480px 1fr', gap: 40, alignItems: 'flex-start' }}>
+      <div className="cf-twocol" style={{ display: 'grid', gridTemplateColumns: '480px 1fr', gap: 40, alignItems: 'flex-start' }}>
         {/* Preview column */}
         <div>
           <CarouselPreview
@@ -134,6 +168,7 @@ export default function PostPage() {
             dayLabel={dayLabel}
             postLabel={postLabel}
             baseName={baseName}
+            displayWidth={previewW}
           />
         </div>
 
@@ -169,28 +204,84 @@ export default function PostPage() {
           </Section>
 
           <Section title="Download">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {/* Image quality — applies to PNG + PDF */}
+            <label style={optLabel}>Image quality</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              {([['HD', 1, '1080×1350'], ['2K', 2, '2160×2700'], ['4K', 3, '3240×4050']] as const).map(([lbl, q, dim]) => (
+                <button key={q} onClick={() => setQuality(q)} style={segBtn(quality === q)} title={dim}>{lbl}</button>
+              ))}
+              <span style={{ alignSelf: 'center', fontSize: 11, color: '#666' }}>
+                {quality === 3 ? '4K — sharpest, slowest' : quality === 1 ? 'HD — fastest' : '2K — sharp + fast'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               <button onClick={() => run(async () => {
                 const nodes = ((window as any).__slideRefs as HTMLDivElement[]).filter(Boolean);
-                await downloadPngZip(nodes, baseName);
+                await downloadPngZip(nodes, baseName, quality);
               }, 'png')} disabled={!!busy} style={primaryBtn(busy === 'png')}>
                 {busy === 'png' ? 'Rendering…' : '📦 PNG (zip)'}
               </button>
               <button onClick={() => run(async () => {
                 const nodes = ((window as any).__slideRefs as HTMLDivElement[]).filter(Boolean);
-                await downloadPdf(nodes, baseName);
+                await downloadPdf(nodes, baseName, quality);
               }, 'pdf')} disabled={!!busy} style={primaryBtn(busy === 'pdf')}>
                 {busy === 'pdf' ? 'Rendering…' : '📄 PDF'}
               </button>
               <button onClick={() => run(async () => {
                 const nodes = ((window as any).__slideRefs as HTMLDivElement[]).filter(Boolean);
-                await downloadMp4(nodes, baseName);
+                await downloadMp4(nodes, baseName, { accent: palette.accent1, transition, perSlideMs: speedMs, kenBurns });
               }, 'mp4')} disabled={!!busy} style={primaryBtn(busy === 'mp4')}>
                 {busy === 'mp4' ? 'Rendering…' : '🎬 MP4 / WebM'}
               </button>
+              <button onClick={() => run(async () => {
+                const nodes = ((window as any).__slideRefs as HTMLDivElement[]).filter(Boolean);
+                await downloadGif(nodes, baseName);
+              }, 'gif')} disabled={!!busy} style={primaryBtn(busy === 'gif')}>
+                {busy === 'gif' ? 'Rendering…' : '🖼️ Animated GIF'}
+              </button>
             </div>
+
+            {/* Video & animation options (apply to the MP4) */}
+            <div style={{ marginTop: 14, padding: 14, background: '#0e0e0e', border: '1px solid #1f1f1f', borderRadius: 10 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.15em', color: '#777', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'JetBrains Mono' }}>
+                🎬 Video options
+              </div>
+
+              {/* Live preview of the selected effect — uses the same painter as the MP4 */}
+              <div style={{ marginBottom: 12 }}>
+                <VideoPreview
+                  transition={transition}
+                  speedMs={speedMs}
+                  kenBurns={kenBurns}
+                  accent={palette.accent1}
+                  captureKey={`${themeId}|${paletteId}|${slides.length}`}
+                />
+                <div style={{ fontSize: 11, color: '#666', textAlign: 'center', marginTop: 6, fontFamily: 'JetBrains Mono' }}>
+                  Live preview · loops the “{transition}” effect
+                </div>
+              </div>
+
+              <label style={optLabel}>Transition / effect</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {(['none', 'auto', ...VIDEO_TRANSITIONS] as VideoTransition[]).map(tr => (
+                  <button key={tr} onClick={() => setTransition(tr)} style={segBtn(transition === tr)}>{tr}</button>
+                ))}
+              </div>
+              <label style={optLabel}>Speed</label>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {([['Fast', 1200], ['Normal', 2000], ['Slow', 3000]] as const).map(([lbl, ms]) => (
+                  <button key={ms} onClick={() => setSpeedMs(ms)} style={segBtn(speedMs === ms)}>{lbl}</button>
+                ))}
+              </div>
+              <label style={optLabel}>Effect</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setKenBurns(true)} style={segBtn(kenBurns)}>Ken Burns zoom</button>
+                <button onClick={() => setKenBurns(false)} style={segBtn(!kenBurns)}>None</button>
+              </div>
+            </div>
+
             <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
-              All rendering runs in your browser. No server, no cost, no upload.
+              All rendering runs in your browser. No server, no cost, no upload. MP4/WebM = full motion + effects · GIF = lightweight loop · PNG/PDF = static for the Instagram &amp; LinkedIn carousel.
             </div>
           </Section>
 
@@ -208,6 +299,34 @@ export default function PostPage() {
             <button onClick={() => navigator.clipboard.writeText(caption)} style={{ ...ghostBtn, marginTop: 8 }}>
               Copy caption
             </button>
+          </Section>
+
+          <Section title="🎨 AI image prompt (matches this theme + palette)">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              <button onClick={() => setPromptSel('post')} style={segBtn(promptIdx === 'post')}>Whole post</button>
+              <button onClick={() => setPromptSel('all')} style={segBtn(promptIdx === 'all')}>All slides</button>
+              {slides.map((_, i) => (
+                <button key={i} onClick={() => setPromptSel(i)} style={segBtn(promptIdx === i)}>{i + 1}</button>
+              ))}
+            </div>
+            <textarea
+              readOnly
+              value={imagePrompt}
+              onFocus={e => e.currentTarget.select()}
+              style={{
+                width: '100%', minHeight: 180, background: '#0e0e0e', color: '#ddd',
+                border: '1px solid #222', borderRadius: 8, padding: 12, fontFamily: 'JetBrains Mono',
+                fontSize: 12, lineHeight: 1.5, resize: 'vertical',
+              }}
+            />
+            <button onClick={() => navigator.clipboard.writeText(imagePrompt)} style={{ ...ghostBtn, marginTop: 8 }}>
+              Copy prompt
+            </button>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 8, lineHeight: 1.5 }}>
+              Paste into Midjourney, DALL·E, Ideogram, etc. to generate an on-brand image, then upload it on the{' '}
+              <Link href={`/author/${day}/${postIdx}`} style={{ color: '#888' }}>Edit content</Link> page.
+              The prompt updates automatically with the selected theme + palette.
+            </div>
           </Section>
         </div>
       </div>
@@ -354,5 +473,17 @@ function primaryBtn(busy: boolean): React.CSSProperties {
     padding: '12px 14px', borderRadius: 8, fontSize: 14, fontWeight: 600,
     background: busy ? '#333' : '#fff', color: busy ? '#aaa' : '#000',
     border: '1px solid #2a2a2a', cursor: busy ? 'wait' : 'pointer',
+  };
+}
+const optLabel: React.CSSProperties = {
+  display: 'block', fontSize: 11, color: '#888', marginBottom: 6,
+  fontFamily: 'JetBrains Mono', letterSpacing: '0.08em', textTransform: 'uppercase',
+};
+function segBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 12px', borderRadius: 6, fontSize: 12, textTransform: 'capitalize',
+    border: '1px solid ' + (active ? '#fff' : '#2a2a2a'),
+    background: active ? '#fff' : '#161616', color: active ? '#000' : '#bbb',
+    cursor: 'pointer', fontWeight: active ? 600 : 400, fontFamily: 'JetBrains Mono',
   };
 }
