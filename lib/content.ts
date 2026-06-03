@@ -1,6 +1,21 @@
 import { Category, DiagramSpec, PostAngle, PostTopic, SlideContent, DayTopic } from './types';
 import { getPost } from './curriculum';
 import { SAMPLE_CONTENT } from './sample-content';
+import POSTS_CONTENT_JSON from './posts-content.json';
+import POSTS_DETAIL_JSON from './posts-detail.json';
+
+// Hand-authored, in-depth content for every post, keyed by "<day>-<postIdx>".
+// Each entry holds a topic-specific Instagram `caption` plus the `slides`.
+// This is the PRIMARY source: it takes precedence over SAMPLE_CONTENT and the
+// generated template. Authored progressively in phases of 10 posts.
+// JSON literal types are wider than our unions, so cast through `unknown`.
+interface AuthoredPost { caption?: string; slides: SlideContent[] }
+const POSTS_CONTENT = POSTS_CONTENT_JSON as unknown as Record<string, AuthoredPost>;
+
+// Per-slide "Deep Dive" write-ups (2–3 paragraphs each), kept in a SEPARATE file
+// so the slides file stays stable. Keyed by "<day>-<postIdx>" → string[] aligned
+// to slide index. Merged onto each slide's `detail` field by getSlides().
+const POSTS_DETAIL = POSTS_DETAIL_JSON as unknown as Record<string, string[]>;
 
 // Per-category flavour data. Used to make the template fallback feel hand-tailored
 // (real examples, real pitfalls, real tools) instead of generic "AI is cool" boilerplate.
@@ -503,13 +518,31 @@ function codeProductionish(f: CategoryFlavour): string {
 }
 
 export function getSlides(day: number, postIdx: number): SlideContent[] {
-  const sampleKey = `${day}-${postIdx}`;
-  const sample = SAMPLE_CONTENT[sampleKey];
+  const key = `${day}-${postIdx}`;
+
+  // 1. Authored JSON content (primary source). Merge in per-slide deep-dive
+  //    details (aligned by index) without mutating the imported objects.
+  const authored = POSTS_CONTENT[key];
+  if (authored && authored.slides && authored.slides.length) {
+    const details = POSTS_DETAIL[key];
+    if (!details) return authored.slides;
+    return authored.slides.map((s, i) =>
+      details[i] && details[i].trim() ? { ...s, detail: details[i] } : s);
+  }
+
+  // 2. Legacy hand-authored TS content (kept as fallback).
+  const sample = SAMPLE_CONTENT[key];
   if (sample) return sample;
 
+  // 3. Generated template (last resort, until the post is authored).
   const ref = getPost(day, postIdx);
   if (!ref) return [];
   return templateForAngle(ref.day.theme, ref.post.angle, ref.day.category);
+}
+
+/** Topic-specific authored caption for a post, if one exists. */
+export function getCaption(day: number, postIdx: number): string | undefined {
+  return POSTS_CONTENT[`${day}-${postIdx}`]?.caption;
 }
 
 export function getPostMeta(day: number, postIdx: number): { day: DayTopic; post: PostTopic } | undefined {

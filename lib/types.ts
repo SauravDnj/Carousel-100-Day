@@ -53,6 +53,10 @@ export interface SlideContent {
   bullets?: string[];
   code?: string;
   codeLang?: string;
+  /** In-depth 2–3 paragraph written explanation for this slide. Rendered on the
+   *  post page's "Deep Dive" section (NOT on the slide image, which stays clean).
+   *  Paragraphs are separated by a blank line ("\n\n"). */
+  detail?: string;
   sticker?: string;
   emoji?: string;
   diagram?: DiagramSpec;

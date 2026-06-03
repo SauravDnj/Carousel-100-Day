@@ -8,7 +8,7 @@ import VideoPreview from '@/components/VideoPreview';
 import { downloadPngZip, downloadPdf, downloadMp4, downloadGif, VideoTransition, VIDEO_TRANSITIONS } from '@/lib/download';
 import { getPalette, getTheme, palettesForTheme, THEMES } from '@/lib/palettes';
 import { buildPostImagePrompt, buildSlideImagePrompt, buildAllSlidesPrompt } from '@/lib/imagePrompt';
-import { getPostMeta, getSlides } from '@/lib/content';
+import { getPostMeta, getSlides, getCaption } from '@/lib/content';
 import { resolveSlides } from '@/lib/post-content';
 import { nextPost, prevPost, nextDay, prevDay, TOTAL_DAYS, POSTS_PER_DAY } from '@/lib/curriculum';
 import { BRAND, PaletteId, SlideContent, ThemeId } from '@/lib/types';
@@ -301,6 +301,39 @@ export default function PostPage() {
             </button>
           </Section>
 
+          {slides.some(s => s.detail && s.detail.trim()) && (
+            <Section title="📖 Deep dive (full written explanation)">
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 14, lineHeight: 1.5 }}>
+                The slides stay clean and scannable. Here's the in-depth explanation behind each one —
+                great for the blog version, show notes, or studying the topic properly.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {slides.map((s, i) => (
+                  (s.detail && s.detail.trim()) ? (
+                    <div key={i} style={{ borderLeft: '3px solid #333', paddingLeft: 14 }}>
+                      <div style={{ fontSize: 12, fontFamily: 'JetBrains Mono', color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                        Slide {i + 1}{s.title ? ` · ${s.title}` : ''}
+                      </div>
+                      {s.detail.split('\n\n').map((para, pi) => (
+                        <p key={pi} style={{ margin: '0 0 10px', fontSize: 14, lineHeight: 1.65, color: '#ccc' }}>{para}</p>
+                      ))}
+                    </div>
+                  ) : null
+                ))}
+              </div>
+              <button
+                onClick={() => navigator.clipboard.writeText(
+                  slides.map((s, i) => s.detail && s.detail.trim()
+                    ? `Slide ${i + 1}${s.title ? ` — ${s.title}` : ''}\n${s.detail.trim()}`
+                    : '').filter(Boolean).join('\n\n')
+                )}
+                style={{ ...ghostBtn, marginTop: 14 }}
+              >
+                Copy full write-up
+              </button>
+            </Section>
+          )}
+
           <Section title="🎨 AI image prompt (matches this theme + palette)">
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               <button onClick={() => setPromptSel('post')} style={segBtn(promptIdx === 'post')}>Whole post</button>
@@ -339,35 +372,42 @@ function buildCaption(meta: NonNullable<ReturnType<typeof getPostMeta>>): string
   const angle = meta.post.angle;
   const cat = meta.day.category;
 
-  // Angle-specific hook in the first line — what's the carousel actually about?
-  const hooks: Record<string, string> = {
-    'Concept':         `Most engineers I talk to have heard of ${stripWhatIs(theme)} but can't explain it in one sentence. This breaks it down.`,
-    'Why It Matters':  `Why does ${stripWhatIs(theme)} actually matter on the job — and what happens when teams skip it.`,
-    'How It Works':    `Step by step — how ${stripWhatIs(theme)} actually works, from input to output. No hand-waving.`,
-    'Code Example':    `${stripWhatIs(theme)} in code — short, runnable, and the variation that ships in prod (not the toy version).`,
-    'Common Mistakes': `5 mistakes I keep seeing with ${stripWhatIs(theme)} in real codebases — and how to avoid them.`,
-  };
-  const hook = hooks[angle] || `${theme} — ${angle.toLowerCase()}.`;
-
   // Pick 6 representative hashtags so the caption reads cleanly + then dump the rest
   const tagsPrimary = meta.post.hashtags.slice(0, 6);
   const tagsRest    = meta.post.hashtags.slice(6);
 
+  // Prefer the authored, topic-specific caption for this exact post. It replaces
+  // the generic hook + "what you'll learn" block; the footer below is shared.
+  const authored = getCaption(meta.day.day, meta.post.postIdx);
+
+  let topicBlock: string;
+  if (authored && authored.trim()) {
+    topicBlock = authored.trim();
+  } else {
+    // Fallback: angle-specific generated hook + breakdown.
+    const hooks: Record<string, string> = {
+      'Concept':         `Most engineers I talk to have heard of ${stripWhatIs(theme)} but can't explain it in one sentence. This breaks it down.`,
+      'Why It Matters':  `Why does ${stripWhatIs(theme)} actually matter on the job — and what happens when teams skip it.`,
+      'How It Works':    `Step by step — how ${stripWhatIs(theme)} actually works, from input to output. No hand-waving.`,
+      'Code Example':    `${stripWhatIs(theme)} in code — short, runnable, and the variation that ships in prod (not the toy version).`,
+      'Common Mistakes': `5 mistakes I keep seeing with ${stripWhatIs(theme)} in real codebases — and how to avoid them.`,
+    };
+    const hook = hooks[angle] || `${theme} — ${angle.toLowerCase()}.`;
+    topicBlock = [
+      `${theme} — ${angle}`,
+      '─'.repeat(28),
+      '',
+      hook,
+      '',
+      'WHAT YOU\'LL LEARN IN THIS POST:',
+      angleBreakdown(angle, stripWhatIs(theme)),
+    ].join('\n');
+  }
+
   const lines = [
-    `${theme} — ${angle}`,
-    '─'.repeat(28),
-    '',
-    hook,
+    topicBlock,
     '',
     `📌 Day ${meta.day.day} of 100 · Post ${meta.post.postIdx} of 5 · Category: ${cat}`,
-    '',
-    'WHAT YOU\'LL LEARN IN THIS POST:',
-    angleBreakdown(angle, stripWhatIs(theme)),
-    '',
-    'WHY I MADE THIS:',
-    'I\'m doing 100 days of carousel posts — five per day, eight slides each — covering AI, ML, RAG, programming, databases, and the full AI-engineering stack. Every post is the explainer I wish I had when I was learning this topic.',
-    '',
-    `Today's topic — ${theme} — sits inside ${cat}. If you find this useful, save it so you can come back, and follow for the daily drop. The next four posts on this topic go deeper: why it matters, how it works internally, a code walkthrough, and the common mistakes.`,
     '',
     '🔁 Save this carousel · 👥 Tag a friend who\'s learning',
     '💬 What\'s a topic you want covered? Comment below.',
